@@ -1,0 +1,44 @@
+# ── Voxel downsampling ────────────────────────────────────────────────────────
+# Larger voxel → fewer points → faster processing, coarser mesh.
+# 0.05 m is a good starting point for a dense cave scan.
+downsampling:
+  voxel_size: 0.05          # metres
+
+# ── Normal estimation (used by Ball Pivoting only) ────────────────────────────
+normals:
+  knn: 30                   # neighbours for PCA-based normal estimation
+  # Orientation heuristic: orient normals toward the scan origin (0,0,0).
+  # For a gallery cave scanned from inside, this points normals inward, which
+  # is correct for BPA to roll the ball on the interior surface.
+  orient_toward_origin: true
+
+# ── Mesh reconstruction algorithm ─────────────────────────────────────────────
+# Choose: "alpha_shape" or "ball_pivoting"
+reconstruction:
+  algorithm: alpha_shape     # swap to "ball_pivoting" to compare
+
+  # Alpha Shapes settings
+  # The alpha radius defines the maximum circumsphere radius of a retained
+  # triangle. Narrow passages have no points inside them, so no triangle is
+  # ever formed across the gap — topology is preserved by construction.
+  alpha_shape:
+    alpha: 0.15              # metres; tune to wall thickness / point spacing
+
+  # Ball Pivoting settings
+  # The ball rolls over the point cloud surface. If there are no points in a
+  # squeeze/passage, the ball cannot bridge it — gaps stay open naturally.
+  ball_pivoting:
+    radii: [0.05, 0.1, 0.2]  # metres; multiple radii fill different scales
+
+# ── Post-reconstruction edge-length filter ────────────────────────────────────
+# Triangles whose longest edge exceeds this threshold are removed.
+# This is the explicit safety net: even if the algorithm accidentally spans a
+# gap (e.g., alpha is too large), the resulting long-edge triangle is culled.
+edge_filter:
+  enabled: true
+  max_edge_length: 0.5       # metres; set to a multiple of voxel_size
+
+# ── Output ────────────────────────────────────────────────────────────────────
+output:
+  save_mesh: true
+  mesh_filename: output_mesh.ply   # written next to the script
