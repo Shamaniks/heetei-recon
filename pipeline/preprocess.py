@@ -117,7 +117,7 @@ def estimate_normals(
     )
 
     if orient_toward_origin:
-        pcd.orient_normals_toward_camera_location(
+        pcd.orient_normals_towards_camera_location(
             camera_location=np.array([0.0, 0.0, 0.0])
         )
 

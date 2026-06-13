@@ -96,6 +96,7 @@ def reconstruct_alpha_shape(
     xyz: np.ndarray,
     alpha: float,
     edge_filter_cfg: dict,
+    smoothing_cfg: dict
 ) -> o3d.geometry.TriangleMesh:
     """
     Reconstruct mesh via 3D Alpha Shapes.
@@ -141,6 +142,11 @@ def reconstruct_alpha_shape(
         "Mesh is empty after edge filtering — max_edge_length is too small "
         "relative to alpha. Relax edge_filter.max_edge_length in config.yaml."
     )
+
+    if smoothing_cfg.get("enabled", False):
+        iters = smoothing_cfg.get("iterations", 15)
+        print(f"[reconstruct] Applying Taubin smoothing ({iters} iterations) …")
+        mesh = mesh.filter_smooth_taubin(number_of_iterations=iters)
 
     mesh.compute_vertex_normals()
     return mesh
@@ -227,10 +233,11 @@ def reconstruct(
     """
     algorithm = cfg["reconstruction"]["algorithm"]
     edge_filter_cfg = cfg["edge_filter"]
+    smoothing_cfg = cfg["smoothing"]
 
     if algorithm == "alpha_shape":
         alpha = float(cfg["reconstruction"]["alpha_shape"]["alpha"])
-        return reconstruct_alpha_shape(xyz, alpha, edge_filter_cfg)
+        return reconstruct_alpha_shape(xyz, alpha, edge_filter_cfg, smoothing_cfg)
 
     if algorithm == "ball_pivoting":
         assert pcd_with_normals is not None, (

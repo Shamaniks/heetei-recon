@@ -23,7 +23,7 @@
 # Do NOT go below 0.05 m on a 12 GB Colab: normal estimation's KD-tree
 # grows super-linearly with point count and will OOM around 4–5M points.
 downsampling:
-  voxel_size: 0.08          # metres  (was 0.05 — increased for OOM safety)
+  voxel_size: 0.25
 
 # ── Normal estimation ─────────────────────────────────────────────────────────
 #
@@ -39,7 +39,7 @@ downsampling:
 # memory-predictable than radius search, which can return unbounded
 # neighbour counts in dense regions and spike memory unpredictably.
 normals:
-  knn: 20                       # neighbours  (was 30 — reduced for OOM safety)
+  knn: 15                       # neighbours  (was 30 — reduced for OOM safety)
   orient_toward_origin: true
 
 # ── Mesh reconstruction ───────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ reconstruction:
   # well below the minimum squeeze width (~0.25–0.30 m), so the algorithm
   # will not bridge gaps.
   alpha_shape:
-    alpha: 0.20                 # metres  (was 0.15 — adjusted for 0.08m voxel)
+    alpha: 0.75                 # metres  (was 0.15 — adjusted for 0.08m voxel)
 
   # Ball Pivoting
   # Justification for radii
@@ -66,8 +66,12 @@ reconstruction:
   # Largest radius (0.30 m) stays below minimum squeeze width so the ball
   # cannot roll across a passage even at maximum reach.
   ball_pivoting:
-    radii: [0.08, 0.16, 0.30]  # metres  (rescaled from [0.05, 0.1, 0.2])
+    radii: [0.25, 0.50, 1.00]  # metres  (rescaled from [0.05, 0.1, 0.2])
 
+# ── Mesh Smoothing ────────────────────────────────────────────────────────────
+smoothing:
+  enabled: true
+  iterations: 15                
 # ── Post-reconstruction edge-length filter ────────────────────────────────────
 #
 # Justification for max_edge_length: 0.40 m
@@ -78,7 +82,7 @@ reconstruction:
 # across a low-density region and should be culled.
 edge_filter:
   enabled: true
-  max_edge_length: 0.40         # metres  (was 0.50 — tightened proportionally)
+  max_edge_length: 2.00         # metres  (was 0.50 — tightened proportionally)
 
 # ── Output ────────────────────────────────────────────────────────────────────
 output:
