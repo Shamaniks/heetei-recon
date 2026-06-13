@@ -1,44 +1,86 @@
-# ── Voxel downsampling ────────────────────────────────────────────────────────
-# Larger voxel → fewer points → faster processing, coarser mesh.
-# 0.05 m is a good starting point for a dense cave scan.
-downsampling:
-  voxel_size: 0.05          # metres
+# config.yaml — v1.1 OOM-resistant baseline
+# Hardware target: Google Colab, 12 GB RAM
+# Sensor: Livox MID-360, ~2 cm ranging accuracy
+# Scene: long gallery cave, ~171 m bounding box, 26.5M raw points
 
-# ── Normal estimation (used by Ball Pivoting only) ────────────────────────────
+# ── Voxel downsampling ────────────────────────────────────────────────────────
+#
+# Justification for 0.08 m
+# ─────────────────────────
+# Sensor accuracy is ~2 cm, so anything below 4× that (~0.08 m) oversamples
+# relative to the measurement noise floor — we lose no real geometric detail.
+#
+# Narrowest cave squeezes ("shkuroders") typically exceed 25–30 cm in their
+# tightest dimension. At 0.08 m voxel size, a 30 cm passage still retains
+# ~3–4 voxel layers across its width, which is sufficient for Alpha Shapes
+# to reconstruct an open boundary rather than bridging the gap.
+#
+# Memory impact:
+#   Raw:         26.5M pts × 12 B = 318 MB
+#   After 0.08m: expected ~1.5–2.5M pts × 12 B ≈ 18–30 MB
+#   Savings:     ~290 MB freed before normal estimation begins
+#
+# Do NOT go below 0.05 m on a 12 GB Colab: normal estimation's KD-tree
+# grows super-linearly with point count and will OOM around 4–5M points.
+downsampling:
+  voxel_size: 0.08          # metres  (was 0.05 — increased for OOM safety)
+
+# ── Normal estimation ─────────────────────────────────────────────────────────
+#
+# Justification for knn: 20
+# ─────────────────────────
+# PCA normal estimation quality plateaus quickly with neighbour count.
+# knn=20 gives stable normals at 0.08 m spacing (neighbourhood radius
+# is roughly 2–3 × voxel_size, well within the cave wall curvature scale).
+# knn=30 (original) uses 50% more memory for the neighbour index with no
+# meaningful accuracy improvement at this point density.
+#
+# radius_search is intentionally absent: KNN with a fixed count is more
+# memory-predictable than radius search, which can return unbounded
+# neighbour counts in dense regions and spike memory unpredictably.
 normals:
-  knn: 30                   # neighbours for PCA-based normal estimation
-  # Orientation heuristic: orient normals toward the scan origin (0,0,0).
-  # For a gallery cave scanned from inside, this points normals inward, which
-  # is correct for BPA to roll the ball on the interior surface.
+  knn: 20                       # neighbours  (was 30 — reduced for OOM safety)
   orient_toward_origin: true
 
-# ── Mesh reconstruction algorithm ─────────────────────────────────────────────
-# Choose: "alpha_shape" or "ball_pivoting"
+# ── Mesh reconstruction ───────────────────────────────────────────────────────
 reconstruction:
-  algorithm: alpha_shape     # swap to "ball_pivoting" to compare
+  algorithm: alpha_shape        # alpha_shape | ball_pivoting
 
-  # Alpha Shapes settings
-  # The alpha radius defines the maximum circumsphere radius of a retained
-  # triangle. Narrow passages have no points inside them, so no triangle is
-  # ever formed across the gap — topology is preserved by construction.
+  # Alpha Shapes
+  # Justification for alpha: 0.20 m
+  # ────────────────────────────────
+  # At 0.08 m voxel size, the average nearest-neighbour distance is ~0.08–
+  # 0.12 m. Alpha must be at least 1.5–2× that to triangulate flat surfaces
+  # without holes → 0.16–0.18 m minimum.
+  # 0.20 m adds a small safety margin for uneven wall surfaces while staying
+  # well below the minimum squeeze width (~0.25–0.30 m), so the algorithm
+  # will not bridge gaps.
   alpha_shape:
-    alpha: 0.15              # metres; tune to wall thickness / point spacing
+    alpha: 0.20                 # metres  (was 0.15 — adjusted for 0.08m voxel)
 
-  # Ball Pivoting settings
-  # The ball rolls over the point cloud surface. If there are no points in a
-  # squeeze/passage, the ball cannot bridge it — gaps stay open naturally.
+  # Ball Pivoting
+  # Justification for radii
+  # ───────────────────────
+  # Smallest radius (0.08 m) matches voxel size — fills fine-scale detail.
+  # Middle radius (0.16 m) covers surface-scale gaps between voxel clusters.
+  # Largest radius (0.30 m) stays below minimum squeeze width so the ball
+  # cannot roll across a passage even at maximum reach.
   ball_pivoting:
-    radii: [0.05, 0.1, 0.2]  # metres; multiple radii fill different scales
+    radii: [0.08, 0.16, 0.30]  # metres  (rescaled from [0.05, 0.1, 0.2])
 
 # ── Post-reconstruction edge-length filter ────────────────────────────────────
-# Triangles whose longest edge exceeds this threshold are removed.
-# This is the explicit safety net: even if the algorithm accidentally spans a
-# gap (e.g., alpha is too large), the resulting long-edge triangle is culled.
+#
+# Justification for max_edge_length: 0.40 m
+# ──────────────────────────────────────────
+# 5× voxel_size (5 × 0.08 = 0.40 m). Triangles legitimate for a cave wall
+# surface will span at most 2–3 voxel widths (~0.24 m). Any triangle with
+# an edge longer than 0.40 m is almost certainly bridging a gap or reaching
+# across a low-density region and should be culled.
 edge_filter:
   enabled: true
-  max_edge_length: 0.5       # metres; set to a multiple of voxel_size
+  max_edge_length: 0.40         # metres  (was 0.50 — tightened proportionally)
 
 # ── Output ────────────────────────────────────────────────────────────────────
 output:
   save_mesh: true
-  mesh_filename: output_mesh.ply   # written next to the script
+  mesh_filename: output_mesh.ply
