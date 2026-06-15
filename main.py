@@ -122,12 +122,10 @@ def main() -> None:
     args = parse_args()
     cfg  = load_config(args.config)
 
-    # Patch: unhardcoded scans/
     laz_path = args.file
-
-    xyz, intensity         = stage_ingest(laz_path)
-    # intensity is not used downstream; free it at the earliest opportunity.
-    del intensity
+    with LazReader(laz_path) as lr:
+        xyz = lr.get_xyz()
+        print("[ingest] Loaded {xyz.shape[0]:,} points from '{laz_path}'")
     gc.collect()
 
     xyz_down, pcd_normals  = stage_preprocess(xyz, cfg)
