@@ -22,9 +22,9 @@ Run in Google Colab:
 !git clone https://github.com/Shamaniks/heetei-recon
 !mv heetei-recon/* ./
 !pip install -r requirements.txt # And restart kernel if asked
-# Download your .laz file to scans/
+# Download your .laz file
 # Set your config in config.yaml as needed
-!python main.py --file <just file name, scans/ is hardcoded>
+!python main.py --file <file>
 ```
 
 ### Local Setup (Linux/macOS)
