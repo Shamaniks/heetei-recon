@@ -30,14 +30,14 @@ class LazReader:
         -------
         xyz : np.ndarray, shape (N, 3), dtype float32
         """
-        scale  = np.float32(las.header.scale)    # shape (3,) after float32 cast
-        offset = np.float32(las.header.offset)   # shape (3,)
+        scale  = np.float32(self.las.header.scale)    # shape (3,) after float32 cast
+        offset = np.float32(self.las.header.offset)   # shape (3,)
 
-        xyz = np.empty((self.num_points, 3), dtype=dtype)
+        xyz = np.empty((self.las.header.point_count, 3), dtype=np.float32)
 
-        xyz[:, 0] = np.array(self.las.X, dtype=dtype) * scale[0] + offset[0]
-        xyz[:, 1] = np.array(self.las.Y, dtype=dtype) * scale[1] + offset[1]
-        xyz[:, 2] = np.array(self.las.Z, dtype=dtype) * scale[2] + offset[2]
+        xyz[:, 0] = np.array(self.las.X, dtype=np.float32) * scale[0] + offset[0]
+        xyz[:, 1] = np.array(self.las.Y, dtype=np.float32) * scale[1] + offset[1]
+        xyz[:, 2] = np.array(self.las.Z, dtype=np.float32) * scale[2] + offset[2]
 
         return xyz
     
@@ -50,8 +50,5 @@ class LazReader:
         """
         # Intensity: uint16 in LAS PF1, but EDA confirms values ≤ 255.
         # Cast to uint8 immediately — saves 26.5M bytes vs keeping uint16.
-        intensity = np.array(las.intensity, dtype=np.uint8)
-        assert intensity.shape[0] == xyz.shape[0], (
-            "Intensity length does not match point count — file may be corrupt"
-        )
+        intensity = np.array(self.las.intensity, dtype=np.uint8)
         return intensity

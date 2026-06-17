@@ -4,26 +4,11 @@
 # Scene: long gallery cave, ~171 m bounding box, 26.5M raw points
 
 # ── Voxel downsampling ────────────────────────────────────────────────────────
-#
-# Justification for 0.08 m
-# ─────────────────────────
-# Sensor accuracy is ~2 cm, so anything below 4× that (~0.08 m) oversamples
-# relative to the measurement noise floor — we lose no real geometric detail.
-#
-# Narrowest cave squeezes ("shkuroders") typically exceed 25–30 cm in their
-# tightest dimension. At 0.08 m voxel size, a 30 cm passage still retains
-# ~3–4 voxel layers across its width, which is sufficient for Alpha Shapes
-# to reconstruct an open boundary rather than bridging the gap.
-#
-# Memory impact:
-#   Raw:         26.5M pts × 12 B = 318 MB
-#   After 0.08m: expected ~1.5–2.5M pts × 12 B ≈ 18–30 MB
-#   Savings:     ~290 MB freed before normal estimation begins
-#
 # Do NOT go below 0.05 m on a 12 GB Colab: normal estimation's KD-tree
 # grows super-linearly with point count and will OOM around 4–5M points.
 downsampling:
   voxel_size: 0.25
+  chunk_size: 4000000 # Downsampling size of point chunks processed for each iteration
 
 # ── Normal estimation ─────────────────────────────────────────────────────────
 #

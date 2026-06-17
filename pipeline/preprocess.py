@@ -1,30 +1,14 @@
 """
 Stage 2 – Preprocessing: voxel downsampling and normal estimation.
-
-PATCH v1.1 — In-place downsampling + explicit C++ vector teardown
------------------------------------------------------------------
-Open3D PointCloud objects hold their data in C++ std::vector<Eigen::Vector3d>
-buffers. CPython's reference-counting GC can decrement the Python wrapper's
-refcount to zero, but the C++ destructor only runs when the *wrapper* is
-collected — and even then, the OS allocator may not immediately return the
-pages to the system (glibc malloc holds free pages in its own pool).
-
-The pattern:
-    pcd.points = o3d.utility.Vector3dVector()   # deallocates C++ storage NOW
-    pcd.normals = o3d.utility.Vector3dVector()  # same for normals buffer
-    del pcd
-    gc.collect()
-
-...forces the C++ destructor to run on the *old* vector immediately (by
-replacing it with an empty one), then removes the Python wrapper, then runs
-any pending Python finalizers. This is the only reliable way to reclaim
-Open3D C++ memory before the next large allocation.
 """
 
 import gc
 
+from tqdm import tqdm
+
 import numpy as np
 import open3d as o3d
+from scipy.spatial import cKDTree
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -38,33 +22,74 @@ def _build_o3d_cloud(xyz: np.ndarray) -> o3d.geometry.PointCloud:
 
 # ── public API ────────────────────────────────────────────────────────────────
 
-def voxel_downsample(xyz: np.ndarray, voxel_size: float) -> np.ndarray:
+def voxel_downsample(
+        xyz_cloud: np.ndarray, 
+        intensity: np.ndarray,
+        xyz_track: np.ndarray,
+        voxel_size: float,
+        chunk_size: int
+    ) -> np.ndarray:
     """
-    Reduce point density via voxel grid averaging.
-
-    PATCH v1.1 memory changes
-    -------------------------
-    1. pcd is built from xyz (xyz is still live — caller owns it).
-    2. voxel_down_sample() returns a NEW PointCloud; we assign it back to
-       the same name `pcd` so the original 26M-point object loses its last
-       Python reference and its C++ destructor runs immediately.
-    3. We extract the numpy array, then wipe pcd's C++ buffer before del.
-    4. The caller is responsible for del xyz after this call returns.
+    Reduce point density via voxel grid max pooling
     """
     assert voxel_size > 0.0, "voxel_size must be a positive number"
 
-    pcd = _build_o3d_cloud(xyz)
-    # xyz is still referenced by the caller; we only own `pcd` here.
+    track_tree = cKDTree(xyz_track, compact_nodes=True)
 
-    # ── PATCH: in-place name rebind frees the 26M-point C++ buffer ────────
-    # voxel_down_sample() allocates a new PointCloud internally. By assigning
-    # the result back to `pcd`, the old wrapper (holding 26M Eigen::Vector3d)
-    # loses its last reference and its destructor runs synchronously in C++.
-    pcd = pcd.voxel_down_sample(voxel_size=voxel_size)
-    # ── end PATCH ─────────────────────────────────────────────────────────
+    n_points = xyz_cloud.shape[0]
+    distances = np.zeros(n_points, dtype=np.float32)
 
-    downsampled = np.asarray(pcd.points, dtype=np.float32)
+    # Calculating distances to closest track point for each cloud point
+    # chunk_size required only there:
+    total_chunks = int(n_points / chunk_size) + 1
+    pbar = tqdm(total=total_chunks, ascii=" -", bar_format="{l_bar}{bar:20}{r_bar}")
 
+    for i in range(0, n_points, chunk_size):
+        end_idx = min(i + chunk_size, n_points)
+        pbar.set_description(f"[downsampling] {i}:{end_idx}")
+
+        dists, _ = track_tree.query(xyz_cloud[i:end_idx], k=1, workers=-1)
+        distances[i:end_idx] = dists.astype(np.float32)
+
+        pbar.update(1)
+    pbar.close()
+
+    del track_tree
+    gc.collect()
+
+    # Restoring approx real intensity
+    norm_intensity = intensity * (distances ** 2) 
+    del distances
+
+    # Voxeling coordinates
+    # voxel_size required only there:
+    vx = np.floor(xyz_cloud[:, 0] / voxel_size).astype(np.int32)
+    vy = np.floor(xyz_cloud[:, 1] / voxel_size).astype(np.int32)
+    vz = np.floor(xyz_cloud[:, 2] / voxel_size).astype(np.int32)
+
+    voxel_hash = (vx.astype(np.int64) << 42) ^ \
+                 (vy.astype(np.int64) << 21) ^ \
+                  vz.astype(np.int64)
+
+    del vx, vy, vz
+    gc.collect()
+
+    # Sorting voxels for future max pooling
+    sort_order = np.lexsort((norm_intensity, voxel_hash))
+    del norm_intensity
+
+    sorted_hash = voxel_hash[sort_order]
+    del voxel_hash
+    
+    _, unique_indices = np.unique(sorted_hash[::-1], return_index=True)
+    del sorted_hash
+
+    keep_indices = sort_order[::-1][unique_indices]
+    del sort_order, unique_indices
+    gc.collect()
+
+    downsampled = xyz_cloud[keep_indices]
+    
     assert downsampled.shape[0] < xyz.shape[0], (
         "Downsampling produced no reduction — voxel_size may be smaller "
         "than point spacing; check config.yaml"
@@ -76,14 +101,9 @@ def voxel_downsample(xyz: np.ndarray, voxel_size: float) -> np.ndarray:
         f"({100.0 * downsampled.shape[0] / xyz.shape[0]:.1f}% retained)"
     )
 
-    # ── PATCH: explicit C++ teardown before returning ──────────────────────
-    # np.asarray above shares memory with the C++ buffer via a zero-copy
-    # view. We must copy first (dtype=np.float32 cast already copies it),
-    # then we can safely wipe the C++ side.
     pcd.points = o3d.utility.Vector3dVector()   # deallocates C++ storage
     del pcd
     gc.collect()
-    # ── end PATCH ─────────────────────────────────────────────────────────
 
     return downsampled
 

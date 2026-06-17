@@ -14,7 +14,7 @@ import sys
 import yaml
 import open3d as o3d
 
-from pipeline.ingest import load_point_cloud
+from pipeline.ingest import LazReader
 from pipeline.preprocess import voxel_downsample, estimate_normals
 from pipeline.reconstruct import reconstruct
 from pipeline.visualize import save_mesh, show_mesh
@@ -32,7 +32,9 @@ def parse_args() -> argparse.Namespace:
         description="Reconstruct a 3D cave mesh from a .laz point cloud."
     )
     parser.add_argument("--cloud", required=True,
-                        help="Name of the .laz file")
+                        help="Name of the point cloud .laz file")
+    parser.add_argument("--track", required=True,
+                        help="Name of the trajectory .laz file")
     parser.add_argument("--config", default="config.yaml",
                         help="Path to config YAML (default: config.yaml)")
     return parser.parse_args()
@@ -44,7 +46,12 @@ def stage_ingest(laz_path: str) -> tuple:
     return xyz, intensity
 
 
-def stage_preprocess(xyz: "np.ndarray", cfg: dict):
+def stage_preprocess(
+        xyz_cloud: "np.ndarray", 
+        intensity: "np.ndarray", 
+        xyz_track: "np.ndarray", 
+        cfg: dict
+    ):
     """
     Downsample, release the 26M raw array, then conditionally estimate normals.
 
@@ -63,7 +70,13 @@ def stage_preprocess(xyz: "np.ndarray", cfg: dict):
     import numpy as np
 
     ds_cfg = cfg["downsampling"]
-    xyz_down = voxel_downsample(xyz, voxel_size=float(ds_cfg["voxel_size"]))
+    xyz_down = voxel_downsample(
+        xyz_cloud, 
+        intensity,
+        xyz_track, 
+        voxel_size=float(ds_cfg["voxel_size"]),
+        chunk_size=int(ds_cfg["chunk_size"]),
+    )
 
     del xyz
     gc.collect()
@@ -122,13 +135,19 @@ def main() -> None:
     args = parse_args()
     cfg  = load_config(args.config)
 
-    laz_path = args.file
-    with LazReader(laz_path) as lr:
-        xyz = lr.get_xyz()
-        print("[ingest] Loaded {xyz.shape[0]:,} points from '{laz_path}'")
+    cloud_path = args.cloud
+    with LazReader(cloud_path) as lr:
+        xyz_cloud = lr.get_xyz()
+        intensity = lr.get_intensity()
+        print(f"[ingest] Loaded {xyz_cloud.shape[0]:,} points from '{cloud_path}'")
+
+    track_path  = args.track
+    with LazReader(track_path) as lr:
+        xyz_track  = lr.get_xyz()
+        print(f"[ingest] Loaded {xyz_track.shape[0]:,} points from '{track_path}'")
     gc.collect()
 
-    xyz_down, pcd_normals  = stage_preprocess(xyz, cfg)
+    xyz_down, pcd_normals  = stage_preprocess(xyz_cloud, intensity, xyz_track, cfg)
     mesh                   = stage_reconstruct(xyz_down, pcd_normals, cfg)
     del xyz_down
     gc.collect()
