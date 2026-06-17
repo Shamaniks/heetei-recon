@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Reconstruct a 3D cave mesh from a .laz point cloud."
     )
-    parser.add_argument("--file", required=True,
+    parser.add_argument("--cloud", required=True,
                         help="Name of the .laz file")
     parser.add_argument("--config", default="config.yaml",
                         help="Path to config YAML (default: config.yaml)")
@@ -129,7 +129,6 @@ def main() -> None:
     gc.collect()
 
     xyz_down, pcd_normals  = stage_preprocess(xyz, cfg)
-
     mesh                   = stage_reconstruct(xyz_down, pcd_normals, cfg)
     del xyz_down
     gc.collect()
