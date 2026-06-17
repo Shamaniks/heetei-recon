@@ -33,54 +33,81 @@ def voxel_downsample(
     Reduce point density via voxel grid max pooling
     """
     assert voxel_size > 0.0, "voxel_size must be a positive number"
+    assert len(xyz_cloud) == len(intensity), "Cloud and intensity arrays must have the same length"
+    
 
-    track_tree = cKDTree(xyz_track, compact_nodes=True)
+    # Voxeling track
+    # voxel_size required there:
+    t_vx = np.floor(xyz_track[:, 0] / voxel_size).astype(np.int32)
+    t_vy = np.floor(xyz_track[:, 1] / voxel_size).astype(np.int32)
+    t_vz = np.floor(xyz_track[:, 2] / voxel_size).astype(np.int32)
+    
+    track_hashes = (t_vx.astype(np.int64) << 42) ^ \
+                   (t_vy.astype(np.int64) << 21) ^ \
+                    t_vz.astype(np.int64)
+    del t_vx, t_vy, t_vz
 
-    n_points = xyz_cloud.shape[0]
-    distances = np.zeros(n_points, dtype=np.float32)
+    unique_track_hashes = np.unique(track_hashes)
+    del track_hashes
+    
+    t_vx_u = (unique_track_hashes >> 42) & 0x1FFFFF
+    t_vy_u = (unique_track_hashes >> 21) & 0x1FFFFF
+    t_vz_u = unique_track_hashes & 0x1FFFFF
+    del unique_track_hashes
+    
+    t_vx_u = np.where(t_vx_u >= 1048576, t_vx_u - 2097152, t_vx_u)
+    t_vy_u = np.where(t_vy_u >= 1048576, t_vy_u - 2097152, t_vy_u)
+    t_vz_u = np.where(t_vz_u >= 1048576, t_vz_u - 2097152, t_vz_u)
+    
+    track_voxel_coords = np.column_stack((t_vx_u, t_vy_u, t_vz_u)).astype(np.int32)
+    print(
+        f"[preprocess] Track downsample ({voxel_size} m)"
+        f" → {track_voxel_coords.shape[0]:,} points "
+    )
+    del t_vx_u, t_vy_u, t_vz_u
 
-    # Calculating distances to closest track point for each cloud point
-    # chunk_size required only there:
-    total_chunks = int(n_points / chunk_size) + 1
-    pbar = tqdm(total=total_chunks, ascii=" -", bar_format="{l_bar}{bar:20}{r_bar}")
+    track_voxel_tree = cKDTree(track_voxel_coords)
+    del track_voxel_coords
+    gc.collect()
+
+    # Voxeling cloud
+    # voxel_size required there:
+    n_points = len(xyz_cloud)
+    
+    p_vx = np.floor(xyz_cloud[:, 0] / voxel_size).astype(np.int32)
+    p_vy = np.floor(xyz_cloud[:, 1] / voxel_size).astype(np.int32)
+    p_vz = np.floor(xyz_cloud[:, 2] / voxel_size).astype(np.int32)
+    
+    adjusted_intensity = np.zeros(n_points, dtype=np.float32)
+    max_range_voxels = int(30.0 / voxel_size) # 30 is hardcoded lidar range FIXME
 
     for i in range(0, n_points, chunk_size):
         end_idx = min(i + chunk_size, n_points)
-        pbar.set_description(f"[downsampling] {i}:{end_idx}")
+        
+        p_chunk = np.column_stack((p_vx[i:end_idx], p_vy[i:end_idx], p_vz[i:end_idx]))
+        
+        min_voxel_dist, _ = track_voxel_tree.query(p_chunk, k=1, workers=-1)
+        
+        r_meters = min_voxel_dist * voxel_size
+        
+        chunk_intensity = intensity[i:end_idx].astype(np.float32) * (r_meters ** 2)
+        
+        chunk_intensity[min_voxel_dist > max_range_voxels] = 0.0
+        
+        adjusted_intensity[i:end_idx] = chunk_intensity
+    del track_voxel_tree 
 
-        dists, _ = track_tree.query(xyz_cloud[i:end_idx], k=1, workers=-1)
-        distances[i:end_idx] = dists.astype(np.float32)
+    point_hash = (p_vx.astype(np.int64) << 42) ^ \
+             (p_vy.astype(np.int64) << 21) ^ \
+              p_vz.astype(np.int64)
+    del p_vx, p_vy, p_vz
 
-        pbar.update(1)
-    pbar.close()
+    sort_order = np.lexsort((adjusted_intensity, point_hash))
+    del adjusted_intensity
 
-    del track_tree
-    gc.collect()
+    sorted_hash = point_hash[sort_order]
+    del point_hash
 
-    # Restoring approx real intensity
-    norm_intensity = intensity * (distances ** 2) 
-    del distances
-
-    # Voxeling coordinates
-    # voxel_size required only there:
-    vx = np.floor(xyz_cloud[:, 0] / voxel_size).astype(np.int32)
-    vy = np.floor(xyz_cloud[:, 1] / voxel_size).astype(np.int32)
-    vz = np.floor(xyz_cloud[:, 2] / voxel_size).astype(np.int32)
-
-    voxel_hash = (vx.astype(np.int64) << 42) ^ \
-                 (vy.astype(np.int64) << 21) ^ \
-                  vz.astype(np.int64)
-
-    del vx, vy, vz
-    gc.collect()
-
-    # Sorting voxels for future max pooling
-    sort_order = np.lexsort((norm_intensity, voxel_hash))
-    del norm_intensity
-
-    sorted_hash = voxel_hash[sort_order]
-    del voxel_hash
-    
     _, unique_indices = np.unique(sorted_hash[::-1], return_index=True)
     del sorted_hash
 
@@ -89,21 +116,17 @@ def voxel_downsample(
     gc.collect()
 
     downsampled = xyz_cloud[keep_indices]
+    del keep_indices
     
-    assert downsampled.shape[0] < xyz.shape[0], (
+    assert downsampled.shape[0] < xyz_cloud.shape[0], (
         "Downsampling produced no reduction — voxel_size may be smaller "
         "than point spacing; check config.yaml"
     )
 
     print(
-        f"[preprocess] Voxel downsample ({voxel_size} m): "
-        f"{xyz.shape[0]:,} → {downsampled.shape[0]:,} points "
-        f"({100.0 * downsampled.shape[0] / xyz.shape[0]:.1f}% retained)"
+        f"[preprocess] Cloud downsample ({voxel_size} m)"
+        f" → {downsampled.shape[0]:,} points "
     )
-
-    pcd.points = o3d.utility.Vector3dVector()   # deallocates C++ storage
-    del pcd
-    gc.collect()
 
     return downsampled
 

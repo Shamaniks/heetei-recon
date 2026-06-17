@@ -8,7 +8,7 @@
 # grows super-linearly with point count and will OOM around 4–5M points.
 downsampling:
   voxel_size: 0.25
-  chunk_size: 4000000 # Downsampling size of point chunks processed for each iteration
+  chunk_size: 20000 # Downsampling size of point chunks processed for each iteration
 
 # ── Normal estimation ─────────────────────────────────────────────────────────
 #

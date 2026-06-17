@@ -78,7 +78,7 @@ def stage_preprocess(
         chunk_size=int(ds_cfg["chunk_size"]),
     )
 
-    del xyz
+    del xyz_cloud, xyz_track
     gc.collect()
 
     algorithm = cfg["reconstruction"]["algorithm"]
@@ -152,7 +152,7 @@ def main() -> None:
     del xyz_down
     gc.collect()
 
-    stage_output(mesh, cfg, laz_path)
+    stage_output(mesh, cfg, cloud_path)
 
 
 if __name__ == "__main__":
