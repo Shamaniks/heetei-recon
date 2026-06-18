@@ -7,20 +7,8 @@ import gc
 from tqdm import tqdm
 
 import numpy as np
-import open3d as o3d
 from scipy.spatial import cKDTree
 
-
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def _build_o3d_cloud(xyz: np.ndarray) -> o3d.geometry.PointCloud:
-    """Wrap a (N, 3) float32 array into an Open3D PointCloud."""
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(xyz.astype(np.float64))
-    return pcd
-
-
-# ── public API ────────────────────────────────────────────────────────────────
 
 def voxel_downsample(
         xyz_cloud: np.ndarray, 
