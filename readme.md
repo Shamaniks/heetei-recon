@@ -10,7 +10,7 @@ This repository features a pipeline for 3D cave reconstruction using Lidar data 
 ## Core Architecture
 The project follows a modular pipeline structure separated into logical stages:
 * `main.py` — Entry point that orchestrates the whole pipeline using parameters from `config.yaml`.
-* `pipeline/ingest.py` — Handles `.laz` file reading and memory-efficient data conversion.
+* `utils/ingest.py` — Handles `.laz` file reading and memory-efficient data conversion.
 * `pipeline/preprocess.py` — Responsible for data filtering and downsampling.
 * `pipeline/reconstruct.py` — Implements surface reconstruction methods (Alpha Shapes / Ball Pivoting).
 * `pipeline/visualize.py` — Manages 3D rendering, mesh visualization and saving using Open3D.
