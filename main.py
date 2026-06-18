@@ -14,7 +14,7 @@ import sys
 import yaml
 import open3d as o3d
 
-from pipeline.ingest import LazReader
+from utils.ingest import LazReader
 from pipeline.preprocess import voxel_downsample, estimate_normals
 from pipeline.reconstruct import reconstruct
 from pipeline.visualize import save_mesh, show_mesh
