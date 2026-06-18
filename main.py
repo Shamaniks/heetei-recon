@@ -3,7 +3,7 @@ main.py – Cave LiDAR mesh reconstruction pipeline.
 
 Usage
 -----
-    python main.py --file <file>
+    python main.py --cloud <cloud .laz> --track <track .laz>
 """
 
 import argparse
