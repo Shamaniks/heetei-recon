@@ -1,12 +1,12 @@
 """
-Stage 1 – Raw point ingestion from a .laz file.
+Raw point ingestion from a .laz file.
 """
 
 import laspy
 import numpy as np
 
 
-class LazReader:
+class LasReader:
     """ Universal reader for both point cloud and traectory """
     def __init__(self, filepath: str):
         self.filepath = filepath

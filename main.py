@@ -14,7 +14,7 @@ import sys
 import yaml
 import open3d as o3d
 
-from utils.ingest import LazReader
+from utils.laz_reader import LasReader
 from pipeline.preprocess import voxel_downsample, estimate_normals
 from pipeline.reconstruct import reconstruct
 from pipeline.visualize import save_mesh, show_mesh
@@ -24,7 +24,7 @@ def load_config(path: str = "config.yaml") -> dict:
     with open(path, "r") as fh:
         cfg = yaml.safe_load(fh)
     assert isinstance(cfg, dict), "config.yaml must be a YAML mapping at root"
-    return cfg
+return cfg
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,7 +48,7 @@ def stage_ingest(laz_path: str) -> tuple:
 
 def stage_preprocess(
         xyz_cloud: "np.ndarray", 
-        intensity: "np.ndarray", 
+intensity: "np.ndarray", 
         xyz_track: "np.ndarray", 
         cfg: dict
     ):

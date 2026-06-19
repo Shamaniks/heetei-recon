@@ -7,3 +7,4 @@ __pycache__/
 *.ply
 *.tar
 *.tar.gz
+*.npz

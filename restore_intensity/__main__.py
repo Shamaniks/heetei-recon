@@ -1,10 +1,11 @@
 """
 Dispatcher of utils module
 Usage:
-    command: python -m utils <restore_intensity|> <kwargs**>
-
-    restore_intensity:
-        --cloud <file.laz|las|npz> --track <file.npz> [--intensity <file.npz>] [--output <file.npz>]
+    command: python -m restore_intensity 
+        --cloud <file.laz|las|npz> 
+        --track <file.npz> 
+        [--intensity <file.npz>] 
+        [--output <file.npz>]
     note: 
         --intensity REQUIRED in case --cloud is .npz (las files contain intensity already)
         --output default is `output.npz`
