@@ -40,6 +40,6 @@ class NpzReader:
         -------
         intensity : np.ndarray, shape (N,), dtype uint8
         """
-        if np.issubdtype(raw_data.dtype, np.floating):
-            return raw_data.astype(np.float32)
-        return raw_data.astype(np.uint8)
+        if np.issubdtype(self.data['intensity'].dtype, np.floating):
+            return self.data['intensity'].astype(np.float32)
+        return self.data['intensity'].astype(np.uint8)
