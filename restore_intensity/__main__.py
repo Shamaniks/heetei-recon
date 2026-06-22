@@ -2,43 +2,60 @@
 Dispatcher of utils module
 Usage:
     command: python -m restore_intensity 
-        --cloud <file.laz|las|npz> 
+        --cloud <file.npz> 
         --track <file.npz> 
-        [--intensity <file.npz>] 
+        --intensity <file.npz>
+        --chunk_size <int>
+        [--lidar_max_range <default=30>]
+        [--restoration_exp <default=2>]
         [--output <file.npz>]
-    note: 
-        --intensity REQUIRED in case --cloud is .npz (las files contain intensity already)
-        --output default is `output.npz`
-        
 """
 
 
-from utils.ingest import LazReader
+from utils.npz_reader import NpzReader
+from restore_intensity.restore_intensity import restore_intensity
 
 
-def restore_intensity_dispatcher(
-        cloud_path:     str,
-        track_path:     str,
-        output_path:    str,
-        cfg:            dict,
-        intensity_path: str = None
-    ) -> None:
-    # FIXME .npz reading isn't implemented
-    # FIXME saving isn't implemented
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Converts .las/.laz data to .npz for future processing"
+    )
+    parser.add_argument("--cloud", required=True,
+                        help="Cloud file `.npz`")
+    parser.add_argument("--track", required=True,
+                        help="Track file `.npz`")
+    parser.add_argument("--intensity", required=True,
+                        help="Intensitu `.npz`")
+    parser.add_argument("--chunk_size", type=int, required=True,
+                        help="Intensitu `.npz`")
+    parser.add_argument("--lidar_max_range", type=float, default=30.0,
+                        help="Max range of LiDAR")
+    parser.add_argument("--restoration_exp", type=float, default=2.0,
+                        help="Float")
+    parser.add_argument("--output", default="output.npz", 
+                        help="Output file for xyz only")
+    return parser.parse_args()
 
-    with LazReader(cloud_path) as lr:
-        xyz_cloud = lr.get_xyz()
-        intensity = lr.get_intensity()
 
-    with LazReader(track_path) as lr:
-        xyz_track = lr.get_xyz()
+if __name__ == "__main__":
+    args = parse_args()
 
-    from utils.restore_intensity import restore_intensity
+    with NpzReader(args.cloud) as nr:
+        xyz_cloud = nr.get_xyz()
 
-    restore_intensity(
+    with NpzReader(args.track) as nr:
+        xyz_track = nr.get_xyz()
+
+    with NpzReader(args.intensity) as nr:
+        intensity = nr.get_intensity()
+
+    intensity = restore_intensity(
         xyz_cloud,
         xyz_track,
         intensity,
-        cfg["chunk_size"]
+        args.chunk_size,
+        agrs.lidar_max_range,
+        args.restoration_exp,
     )
     
+    np.savez_compressed(args.output, intensity=intensity)
