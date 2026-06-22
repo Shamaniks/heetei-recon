@@ -35,6 +35,12 @@ if __name__ == "__main__":
     with LasReader(args.source) as lr:
 
         xyz = lr.get_xyz()
+
+        print("[loader] Scale readed:", lr.scale)
+        print("[loader] Offset readed:", lr.offset)
+        print("[loader] Dtype:", xyz.dtype)
+        print(f"[loader] Points loaded: {len(xyz):,}")
+
         np.savez_compressed(args.output, xyz=xyz)
 
         if args.intensity:

@@ -24,22 +24,22 @@ class LasReader:
 
     def get_xyz(self):
         """
-        Extracts coordinates and casts to float32
+        Extracts coordinates
 
         Returns
         -------
         xyz : np.ndarray, shape (N, 3), dtype float32
         """
-        scale  = np.float32(self.las.header.scale)    # shape (3,) after float32 cast
-        offset = np.float32(self.las.header.offset)   # shape (3,)
+        xyz = np.empty((self.las.header.point_count, 3), dtype=np.int32)
 
-        xyz = np.empty((self.las.header.point_count, 3), dtype=np.float32)
+        xyz[:, 0] = np.array(self.las.X, dtype=np.int32)
+        xyz[:, 1] = np.array(self.las.Y, dtype=np.int32)
+        xyz[:, 2] = np.array(self.las.Z, dtype=np.int32)
 
-        xyz[:, 0] = np.array(self.las.X, dtype=np.float32) * scale[0] + offset[0]
-        xyz[:, 1] = np.array(self.las.Y, dtype=np.float32) * scale[1] + offset[1]
-        xyz[:, 2] = np.array(self.las.Z, dtype=np.float32) * scale[2] + offset[2]
+        self.scale  = np.float32(self.las.header.scale)
+        self.offset = np.float32(self.las.header.offset)
 
-        return xyz
+        return xyz 
     
     
     def get_intensity(self):

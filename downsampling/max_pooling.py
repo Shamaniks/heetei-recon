@@ -9,11 +9,14 @@ from tqdm import tqdm
 import numpy as np
 from scipy.spatial import cKDTree
 
+from downsampling.voxelisation import binary_voxelisation
+
 
 def voxel_downsample(
-        xyz_cloud: np.ndarray, 
-        intensity: np.ndarray,
+        xyz_cloud:  np.ndarray, 
+        intensity:  np.ndarray,
         voxel_size: float,
+        scale:      float,
     ) -> np.ndarray:
     """
     Reduce point density via voxel grid max pooling
@@ -23,12 +26,6 @@ def voxel_downsample(
     
     # Voxeling cloud
     # voxel_size required there:
-    n_points = len(xyz_cloud)
-    
-    p_vx = np.floor(xyz_cloud[:, 0] / voxel_size).astype(np.int32)
-    p_vy = np.floor(xyz_cloud[:, 1] / voxel_size).astype(np.int32)
-    p_vz = np.floor(xyz_cloud[:, 2] / voxel_size).astype(np.int32)
-    
     point_hash = (p_vx.astype(np.int64) << 42) ^ \
              (p_vy.astype(np.int64) << 21) ^ \
               p_vz.astype(np.int64)
