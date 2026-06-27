@@ -25,13 +25,13 @@ class NpzReader:
 
     def get_xyz(self):
         """
-        Extracts coordinates and returns as float32
+        Extracts coordinates and returns as int32
 
         Returns
         -------
-        xyz : np.ndarray, shape (N, 3), dtype float32
+        xyz : np.ndarray, shape (N, 3), dtype int32
         """
-        return np.array(self.data['xyz'], dtype=np.float32)
+        return np.array(self.data['xyz'], dtype=np.int32)
     
     
     def get_intensity(self):

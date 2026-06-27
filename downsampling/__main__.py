@@ -43,7 +43,7 @@ if __name__ == "__main__":
             intensity = nr.get_intensity()
         assert len(xyz) == len(intensity)
 
-        indices = voxel_downsample(xyz, intensity, args.voxel_size)
+        indices = voxel_downsample(xyz, intensity, args.voxel_size, 1e-4)
     else:
         # Different downsampling method isn't implemented yet
         pass
@@ -51,3 +51,4 @@ if __name__ == "__main__":
     xyz_down = xyz[indices]
     print(f"[downsampling] Downsampled point number: {len(xyz_down):,}")
     np.savez_compressed(args.output, xyz=xyz_down)
+    np.savez_compressed(f"{args.output[:-3]}_intensity.npz", intensity=intensity[indices])

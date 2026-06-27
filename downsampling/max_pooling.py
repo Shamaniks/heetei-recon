@@ -26,10 +26,21 @@ def voxel_downsample(
     
     # Voxeling cloud
     # voxel_size required there:
-    point_hash = (p_vx.astype(np.int64) << 42) ^ \
-             (p_vy.astype(np.int64) << 21) ^ \
-              p_vz.astype(np.int64)
-    del p_vx, p_vy, p_vz
+    voxels = binary_voxelisation(
+        xyz_cloud,
+        voxel_size,
+        scale,
+    )
+
+    p_vx = voxels[:, 0]
+    p_vy = voxels[:, 1]
+    p_vz = voxels[:, 2]
+
+    point_hash = \
+        (p_vx.astype(np.int64) << 42) ^ \
+        (p_vy.astype(np.int64) << 21) ^ \
+         p_vz.astype(np.int64)
+    del p_vx, p_vy, p_vz, voxels
 
     sort_order = np.lexsort((intensity, point_hash))
 
