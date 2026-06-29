@@ -11,7 +11,7 @@ class LasReader:
     def __init__(self, filepath: str):
         self.filepath = filepath
         self.las = None
-    
+
 
     def __enter__(self):
         print(f"[las_reader] entered reader for file {self.filepath}")
