@@ -74,7 +74,8 @@ class LasReader:
         """
         Returns
         -------
-        gps_time : np.ndarray, shape (N,), dtype uint8?
+        gps_time : np.ndarray, shape (N,), dtype ---
+        !!! currently not working cuz binary mismatch from mandeye controller
         """
         raw_gps_time = self.las.gps_time.view(np.uint64)
 
