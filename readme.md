@@ -38,6 +38,7 @@ python -m <module> <args>
 ```
 
 ## Future Roadmap
+- [ ] Implement direct reader for splitted Mandeye session chunks (`lidarXXXX.laz` + `imuXXXX.csv`) instead of united `.laz` after HDMapping
 - [ ] Usage of scanning `gpstime` for finding source track point instead of finding closest via `scipy.spatial.cKDtree`
 - [ ] Polars hashtable for voxelisation instead of np.unique for better time optimization
 - [ ] Visualization module for point clouds with colors passed, mesh grid

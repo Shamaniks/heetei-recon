@@ -55,9 +55,13 @@ class LasReader:
         Returns
         -------
         intensity : np.ndarray, shape (N,), dtype uint8
+
+        Reasoning
+        ---------
+        uint16 in LAS PF1, but EDA confirms values <= 255.
+        cast to uint8 immediately — saves 26.5M bytes (for heetei) vs keeping uint16.
         """
-        # Intensity: uint16 in LAS PF1, but EDA confirms values <= 255.
-        # Cast to uint8 immediately — saves 26.5M bytes vs keeping uint16.
+        # 
         raw_intensity = self.las.intensity
 
         print("[las_reader] intensity readed")
@@ -74,15 +78,19 @@ class LasReader:
         """
         Returns
         -------
-        gps_time : np.ndarray, shape (N,), dtype ---
-        !!! currently not working cuz binary mismatch from mandeye controller
+        gps_time : np.ndarray, shape (N,), dtype uint64 (int nanoseconds) 
+        
+        Reasoning
+        ---------
+        uint32 is for ~4.29 second, `.laz` chunks from Mandeye are >5.0 seconds - not enough
+        float64 not suitable for hash-comparison
         """
-        raw_gps_time = self.las.gps_time.view(np.uint64)
+        raw_gps_time = self.las.gps_time
 
         print("[las_reader] gps_time readed")
 
         print(f"[las_reader] gps_time original dtype: {raw_gps_time.dtype}")
-        print(f"[las_reader] gps_time min: {raw_gps_time.min()}")
-        print(f"[las_reader] gps_time max: {raw_gps_time.max()}")
+        print(f"[las_reader] gps_time min: {raw_gps_time.min():,}")
+        print(f"[las_reader] gps_time max: {raw_gps_time.max():,}")
 
         # return intensity
