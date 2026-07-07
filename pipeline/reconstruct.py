@@ -73,12 +73,18 @@ def filter_long_edges(
         (e20_sq <= max_edge_sq)
     )
 
-    filtered = mesh.select_by_index(
-        np.where(keep_mask)[0].tolist(),
-        cleanup=False,   # do not remove unreferenced vertices yet
-    )
+    # NOTE: select_by_index() selects by VERTEX index (see its docstring),
+    # not triangle index. keep_mask is a per-TRIANGLE mask, so building
+    # indices from it and handing them to select_by_index() would silently
+    # select the wrong vertices (and throw "index out of range" warnings
+    # whenever a triangle index happened to exceed the vertex count). The
+    # filtered triangle array is built directly instead.
+    filtered = o3d.geometry.TriangleMesh()
+    filtered.vertices = mesh.vertices
+    filtered.triangles = o3d.utility.Vector3iVector(triangles[keep_mask])
 
-    # Remove vertices no longer referenced by any triangle.
+    # Remove vertices no longer referenced by any triangle, remapping the
+    # surviving triangles' indices accordingly.
     filtered.remove_unreferenced_vertices()
 
     n_removed = int((~keep_mask).sum())

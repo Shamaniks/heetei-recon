@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 
 from utils.npz_reader import NpzReader
@@ -33,26 +35,3 @@ def intensity_to_viridis(intensity: np.ndarray) -> np.ndarray:
 
     colors = np.clip(np.stack([r, g, b], axis=1), 0.0, 1.0).astype(np.float64)
     return colors
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Converts intensity to approximate viridis [0.0, 1.0] colors for visualization"
-    )
-    parser.add_argument("--source", required=True,
-                        help="Source file for convertation")
-    parser.add_argument("--colors", default=None,
-                        help="Output file colors")
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    with NpzReader(args.source) as nr:
-        intensity = nr.get_intensity()
-    print("[viridis] readed intensity")
-
-    colors = intensity_to_viridis(intensity)
-    print("[viridis] intensity converted to colors")
-
-    np.savez_compressed(args.colors, colors=colors)
-    print(f"[viridis] intensity array converted to {args.colors}")

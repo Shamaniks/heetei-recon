@@ -1,75 +1,105 @@
-# config.yaml — v1.1 OOM-resistant baseline
-# Hardware target: Google Colab, 12 GB RAM
+# config.yaml — v2.0 unified pipeline (raw multi-chunk ingestion + legacy single-file)
+# Hardware target: Edge device (e.g. Raspberry Pi class), headless-capable
 # Sensor: Livox MID-360, ~2 cm ranging accuracy
 # Scene: long gallery cave, ~171 m bounding box, 26.5M raw points
 
+# ── Pipeline orchestration ────────────────────────────────────────────────────
+# Master enable/disable switches for optional stages, without editing
+# main.py. Ingestion itself is not togglable — it is the mandatory first
+# stage every run depends on.
+pipeline:
+  restore_intensity: true
+  downsampling: true
+  reconstruction: true
+  visualization: true
+
+# ── Ingestion ─────────────────────────────────────────────────────────────────
+# mode: "chunks"      — raw split Mandeye session (lidarXXXX.laz +
+#                        imuXXXX.csv + statusXXXX.json [+ lidarXXXX.sn]),
+#                        discovered and merged from session_dir.
+#       "single_file" — one pre-merged cloud .laz (legacy behaviour).
+#
+# track_path is a SEPARATE, precomputed trajectory .laz (e.g. produced
+# upstream by HDMapping's LiDAR-Inertial-Odometry stage). Raw IMU samples
+# read from session chunks are NOT integrated into a trajectory by this
+# pipeline — computing one is a full SLAM/LIO problem and is out of scope
+# for this refactor (see main.py docstring). If track_path is omitted,
+# the restore_intensity stage is skipped explicitly and raw recorded
+# intensity is passed through unchanged, even if pipeline.restore_intensity
+# is true.
+ingestion:
+  mode: chunks
+  session_dir: null              # required when mode: chunks
+  chunk_glob: "lidar????.laz"    # discovery pattern for session chunk files
+  require_imu: true              # exclude (with a logged warning) a chunk missing imuXXXX.csv
+  require_status: true           # exclude (with a logged warning) a chunk missing statusXXXX.json
+  cloud_path: null               # required when mode: single_file
+  track_path: null               # optional in both modes; enables restore_intensity
+
+# ── Intensity restoration ─────────────────────────────────────────────────────
+# A(d) = intensity_raw * d ** restoration_exp, zeroed beyond lidar_max_range.
+# chunk_size here is an in-memory KD-tree query batch size (points per
+# iteration) — unrelated to the raw session chunks read during ingestion.
+restore_intensity:
+  chunk_size: 20000
+  lidar_max_range: 30.0
+  restoration_exp: 2.0
+
 # ── Voxel downsampling ────────────────────────────────────────────────────────
-# Do NOT go below 0.05 m on a 12 GB Colab: normal estimation's KD-tree
-# grows super-linearly with point count and will OOM around 4–5M points.
+# Do NOT go below 0.05 m: normal estimation's KD-tree grows super-linearly
+# with point count and will OOM on Edge-class RAM budgets around 4-5M points.
+# NOTE: the coordinate scale used by voxelisation is read directly from the
+# ingested LAS header (see main.py stage_downsample) rather than duplicated
+# here — a duplicated value could silently drift from the data and corrupt
+# the voxel bucket size.
 downsampling:
   voxel_size: 0.25
-  chunk_size: 20000 # Downsampling size of point chunks processed for each iteration
 
-# ── Normal estimation ─────────────────────────────────────────────────────────
-#
-# Justification for knn: 20
-# ─────────────────────────
-# PCA normal estimation quality plateaus quickly with neighbour count.
-# knn=20 gives stable normals at 0.08 m spacing (neighbourhood radius
-# is roughly 2–3 × voxel_size, well within the cave wall curvature scale).
-# knn=30 (original) uses 50% more memory for the neighbour index with no
-# meaningful accuracy improvement at this point density.
-#
-# radius_search is intentionally absent: KNN with a fixed count is more
-# memory-predictable than radius search, which can return unbounded
-# neighbour counts in dense regions and spike memory unpredictably.
+# ── Normal estimation (Ball Pivoting reconstruction only) ────────────────────
+# knn=15 gives stable normals at this point density; radius_search is
+# intentionally absent, since KNN with a fixed count is more
+# memory-predictable than radius search (unbounded neighbour counts in
+# dense regions can spike memory unpredictably).
 normals:
-  knn: 15                       # neighbours  (was 30 — reduced for OOM safety)
+  knn: 15
   orient_toward_origin: true
 
 # ── Mesh reconstruction ───────────────────────────────────────────────────────
 reconstruction:
   algorithm: alpha_shape        # alpha_shape | ball_pivoting
 
-  # Alpha Shapes
-  # Justification for alpha: 0.20 m
-  # ────────────────────────────────
-  # At 0.08 m voxel size, the average nearest-neighbour distance is ~0.08–
-  # 0.12 m. Alpha must be at least 1.5–2× that to triangulate flat surfaces
-  # without holes → 0.16–0.18 m minimum.
-  # 0.20 m adds a small safety margin for uneven wall surfaces while staying
-  # well below the minimum squeeze width (~0.25–0.30 m), so the algorithm
-  # will not bridge gaps.
+  # alpha >= ~1.5-2x the average nearest-neighbour spacing at this
+  # voxel_size, while staying below the minimum squeeze width so gaps are
+  # not bridged.
   alpha_shape:
-    alpha: 0.75                 # metres  (was 0.15 — adjusted for 0.08m voxel)
+    alpha: 0.75                 # metres
 
-  # Ball Pivoting
-  # Justification for radii
-  # ───────────────────────
-  # Smallest radius (0.08 m) matches voxel size — fills fine-scale detail.
-  # Middle radius (0.16 m) covers surface-scale gaps between voxel clusters.
-  # Largest radius (0.30 m) stays below minimum squeeze width so the ball
-  # cannot roll across a passage even at maximum reach.
+  # Radii chosen to fill fine-scale detail (smallest, ~voxel_size) up to
+  # surface-scale gaps (largest, still below minimum squeeze width).
   ball_pivoting:
-    radii: [0.25, 0.50, 1.00]  # metres  (rescaled from [0.05, 0.1, 0.2])
+    radii: [0.25, 0.50, 1.00]   # metres
 
-# ── Mesh Smoothing ────────────────────────────────────────────────────────────
+# ── Mesh smoothing ────────────────────────────────────────────────────────────
 smoothing:
   enabled: true
-  iterations: 15                
+  iterations: 15
+
 # ── Post-reconstruction edge-length filter ────────────────────────────────────
-#
-# Justification for max_edge_length: 0.40 m
-# ──────────────────────────────────────────
-# 5× voxel_size (5 × 0.08 = 0.40 m). Triangles legitimate for a cave wall
-# surface will span at most 2–3 voxel widths (~0.24 m). Any triangle with
-# an edge longer than 0.40 m is almost certainly bridging a gap or reaching
-# across a low-density region and should be culled.
+# Any triangle with an edge longer than max_edge_length is almost
+# certainly bridging a gap or a low-density region and is culled.
 edge_filter:
   enabled: true
-  max_edge_length: 2.00         # metres  (was 0.50 — tightened proportionally)
+  max_edge_length: 2.00         # metres
 
-# ── Output ────────────────────────────────────────────────────────────────────
+# ── Visualization (point-cloud QA preview) ────────────────────────────────────
+# interactive: false is the safe default for headless Edge hardware —
+# opening an Open3D window with no display attached will fail.
+visualization:
+  colored_points: true
+  point_cloud_filename: colored_points.ply
+  interactive: false
+
+# ── Final mesh output ─────────────────────────────────────────────────────────
 output:
   save_mesh: true
   mesh_filename: output_mesh.ply

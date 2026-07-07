@@ -39,8 +39,8 @@ class LasReader:
         xyz[:, 1] = np.array(self.las.Y, dtype=np.int32)
         xyz[:, 2] = np.array(self.las.Z, dtype=np.int32)
 
-        self.scale  = np.float32(self.las.header.scale)
-        self.offset = np.float32(self.las.header.offset)
+        self.scale  = np.float32(self.las.header.scales)
+        self.offset = np.float32(self.las.header.offsets)
 
         print("[las_reader] scale readed:", self.scale)
         print("[las_reader] offset readed:", self.offset)
