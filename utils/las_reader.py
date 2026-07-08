@@ -78,19 +78,31 @@ class LasReader:
         """
         Returns
         -------
-        gps_time : np.ndarray, shape (N,), dtype uint64 (int nanoseconds) 
-        
+        gps_time : np.ndarray, shape (N,), dtype uint64 (nanoseconds)
+ 
         Reasoning
         ---------
-        uint32 is for ~4.29 second, `.laz` chunks from Mandeye are >5.0 seconds - not enough
-        float64 not suitable for hash-comparison
+        uint32 is for ~4.29 second, `.laz` chunks from Mandeye are >5.0 seconds - not enough.
+        float64 not suitable for hash-comparison / exact equality across files.
+        uint64 nanoseconds gives exact integer comparisons with enormous
+        headroom (max ~1.8e19) — comfortably covers both LAS GPS Time
+        conventions (GPS Week Time: seconds-of-week, max 604800; or
+        Adjusted Standard GPS Time: GPS-epoch seconds minus 1e9, currently
+        ~4.5e8) with no risk of overflow.
         """
         raw_gps_time = self.las.gps_time
-
+ 
         print("[las_reader] gps_time readed")
-
         print(f"[las_reader] gps_time original dtype: {raw_gps_time.dtype}")
         print(f"[las_reader] gps_time min: {raw_gps_time.min():,}")
         print(f"[las_reader] gps_time max: {raw_gps_time.max():,}")
-
-        # return intensity
+ 
+        assert np.all(raw_gps_time >= 0), (
+            "gps_time must be non-negative to store as uint64 nanoseconds"
+        )
+        gps_time_ns = np.round(raw_gps_time.astype(np.float64) * 1_000_000_000.0).astype(np.uint64)
+ 
+        print(f"[las_reader] gps_time converted to uint64 ns, "
+              f"range [{gps_time_ns.min()}, {gps_time_ns.max()}]")
+ 
+        return gps_time_ns
