@@ -177,10 +177,11 @@ def _read_sn_bytes(path: str):
 
 
 def _load_one_chunk(session_dir: str, idx: int) -> SessionChunk:
-    """Load a single, already-validated chunk in full."""
+    """Load single chunk with global coords."""
     paths = _chunk_paths(session_dir, idx)
-    with LasReader(paths["laz"]) as lr:
-        xyz = lr.get_xyz()
+    imu_path = paths["imu"]
+    with LasReader(paths["laz"], imu_path=imu_path) as lr:
+        xyz = lr.get_global_xyz()  
         intensity = lr.get_intensity()
         scale, offset = lr.scale, lr.offset
 
