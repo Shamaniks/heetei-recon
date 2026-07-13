@@ -5,6 +5,8 @@ Mesh visualisation and optional PLY export.
 
 import argparse
 import open3d as o3d
+import open3d.visualization.gui as gui
+import open3d.visualization.rendering as rendering
 
 
 from utils.npz_reader import NpzReader
@@ -35,11 +37,36 @@ if __name__ == "__main__":
     print("[visualize] Opening interactive viewer for point cloud"
           "(close the window to exit) …")
 
-    o3d.visualization.draw_geometries(
-        [pcd],
-        window_name="Point cloud only visualization",
-        width=1280,
-        height=800,
-        mesh_show_back_face=True,
-        mesh_show_wireframe=False,
-    )
+    app = gui.Application.instance
+    app.initialize()
+
+    window = app.create_window("", 1024, 768)
+    scene_widget = gui.SceneWidget()
+    window.add_child(scene_widget)
+
+    scene_widget.scene = rendering.Open3DScene(window.renderer)
+    scene_widget.scene.show_axes(True)
+
+    # Используем defaultUnlit для отображения точек без расчета теней и бликов
+    material = rendering.MaterialRecord()
+    material.shader = "defaultUnlit"
+    material.point_size = 2.0  # Опционально: задаем размер точек на экране
+
+    # Добавляем облако точек (pcd) вместо сетки (mesh)
+    scene_widget.scene.add_geometry("point_cloud", pcd, material)
+
+    # Рассчитываем границы и камеру на основе pcd
+    bounds = pcd.get_axis_aligned_bounding_box()
+    center = bounds.get_center()
+    scene_widget.setup_camera(60, bounds, center)
+
+    up_vector = [0.0, 0.0, 1.0] 
+
+    cam_matrix = scene_widget.scene.camera.get_model_matrix()
+    eye = cam_matrix[:3, 3]
+
+    scene_widget.scene.camera.look_at(center, eye, up_vector)
+
+    scene_widget.set_view_controls(gui.SceneWidget.Controls.FLY)
+
+    app.run()
