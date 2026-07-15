@@ -28,7 +28,7 @@ pipeline:
 # intensity is passed through unchanged, even if pipeline.restore_intensity
 # is true.
 ingestion:
-  mode: chunks
+  mode: single_file
   session_dir: null              # required when mode: chunks
   chunk_glob: "lidar????.laz"    # discovery pattern for session chunk files
   require_imu: true              # exclude (with a logged warning) a chunk missing imuXXXX.csv
@@ -103,3 +103,9 @@ visualization:
 output:
   save_mesh: true
   mesh_filename: output_mesh.ply
+
+# ── Final mesh output ─────────────────────────────────────────────────────────
+therion:
+  step_meters: 3.0
+  dt_sec: 0.5
+  survey_name: survey

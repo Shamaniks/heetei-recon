@@ -67,6 +67,7 @@ import open3d as o3d
 import yaml
 
 from utils.las_reader import LasReader
+from utils.therion import process_cloud_to_therion
 from ingest.chunk_reader import load_session_arrays
 from restore_intensity.restore_intensity import restore as restore_intensity_fn
 from downsampling.max_pooling import voxel_downsample
@@ -83,12 +84,12 @@ from visualization.colored_points import (
 @dataclass
 class IngestResult:
     xyz: np.ndarray                 # (N, 3) int32 — raw LAS grid coordinates
+    gps: np.ndarray                 # (N,)   uint64 — LAS nanoseconds of point record
     intensity: np.ndarray           # (N,)   uint8 — raw recorded intensity
     scale: np.ndarray               # (3,)   float32 — cloud's LAS header scale
     offset: np.ndarray              # (3,)   float32 — cloud's LAS header offset
     xyz_track: "np.ndarray | None"  # (M, 3) int32, or None if no track_path
-    track_scale: "np.ndarray | None"
-    track_offset: "np.ndarray | None"
+    gps_track: np.ndarray           # (N,)   uint64 — LAS nanoseconds of point record
 
 
 def load_config(path: str) -> dict:
@@ -146,21 +147,19 @@ def stage_ingest(cfg: dict) -> IngestResult:
         assert cloud_path is not None, "ingestion.cloud_path is required when mode: single_file"
         assert os.path.isfile(cloud_path), f"Input file not found: '{cloud_path}'"
         with LasReader(cloud_path) as lr:
-            xyz, intensity, scale, offset = lr.get_xyz(), lr.get_intensity(), lr.scale, lr.offset
-        print(f"[ingest] Loaded {xyz.shape[0]:,} points from '{cloud_path}'")
+            xyz, gps, intensity, scale, offset = lr.get_xyz(), lr.get_gps_time(), lr.get_intensity(), lr.scale, lr.offset
+        print(f"[ingest] loaded {xyz.shape[0]:,} points from '{cloud_path}'")
 
+        track_path = ing["track_path"]
+        if track_path is not None:
+            assert os.path.isfile(track_path), f"Trajectory file not found: '{track_path}'"
+            with LasReader(track_path) as lr:
+                xyz_track, gps_track = lr.get_xyz(), lr.get_gps_time()
+            print(f"[ingest] loaded {xyz_track.shape[0]:,} trajectory points from '{track_path}'")
     else:
         raise ValueError(f"Unknown ingestion.mode '{mode}'. Valid options: 'chunks', 'single_file'")
 
-    xyz_track = track_scale = track_offset = None
-    track_path = ing["track_path"]
-    if track_path is not None:
-        assert os.path.isfile(track_path), f"Trajectory file not found: '{track_path}'"
-        with LasReader(track_path) as lr:
-            xyz_track, track_scale, track_offset = lr.get_xyz(), lr.scale, lr.offset
-        print(f"[ingest] Loaded {xyz_track.shape[0]:,} trajectory points from '{track_path}'")
-
-    return IngestResult(xyz, intensity, scale, offset, xyz_track, track_scale, track_offset)
+    return IngestResult(xyz, gps, intensity, scale, offset, xyz_track, gps_track)
 
 
 # ── Shared: int32 grid -> metric float64 ──────────────────────────────────────
@@ -293,6 +292,24 @@ def stage_output(mesh, xyz_metres: np.ndarray, intensity: np.ndarray, cfg: dict)
             show_mesh(mesh)
 
 
+# ── Therion convertation ─────────────────────────────────────────────────────
+def stage_therion_processing(ingested, cfg):
+    therion_cfg = cfg["therion"]
+    scale = ingested.scale[0]
+    step = int(therion_cfg["step_meters"] / scale)
+    survey = process_cloud_to_therion(
+        ingested.xyz_track,
+        ingested.gps_track,
+        ingested.xyz,
+        ingested.gps,
+        scale,
+        therion_cfg["survey_name"],
+        step,
+        therion_cfg["dt_sec"]
+    )
+    return survey
+
+
 # ── Orchestrator ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -301,24 +318,28 @@ def main() -> None:
 
     ingested = stage_ingest(cfg)
 
-    intensity = stage_restore_intensity(ingested, cfg)
-    xyz = ingested.xyz
-    scale, offset = ingested.scale, ingested.offset
-    del ingested
-    gc.collect()
+    # intensity = stage_restore_intensity(ingested, cfg)
+    # xyz = ingested.xyz
+    # scale, offset = ingested.scale, ingested.offset
+    # del ingested
+    # gc.collect()
 
-    xyz_down, intensity_down = stage_downsample(xyz, intensity, scale, cfg)
-    del xyz, intensity
-    gc.collect()
+    survey = stage_therion_processing(ingested, cfg)
+    survey.save()
+    del survey, ingested
 
-    xyz_metres = stage_to_metres(xyz_down, scale, offset)
-    del xyz_down
-    gc.collect()
+    # xyz_down, intensity_down = stage_downsample(xyz, intensity, scale, cfg)
+    # del xyz, intensity
+    # gc.collect()
 
-    pcd_with_normals = stage_normals(xyz_metres, cfg)
-    mesh = stage_reconstruct(xyz_metres, pcd_with_normals, cfg)
+    # xyz_metres = stage_to_metres(xyz_down, scale, offset)
+    # del xyz_down
+    # gc.collect()
 
-    stage_output(mesh, xyz_metres, intensity_down, cfg)
+    # pcd_with_normals = stage_normals(xyz_metres, cfg)
+    # mesh = stage_reconstruct(xyz_metres, pcd_with_normals, cfg)
+
+    # stage_output(mesh, xyz_metres, intensity_down, cfg)
 
 
 if __name__ == "__main__":

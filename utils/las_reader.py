@@ -104,12 +104,14 @@ class LasReader:
 
 
     def get_gps_time(self):
-        raw_gps_time = self.las.gps_time
+        gps_time = self.las.gps_time
         print("[las_reader] gps_time readed")
-        print(f"[las_reader] gps_time original dtype: {raw_gps_time.dtype}")
-        print(f"[las_reader] gps_time min: {raw_gps_time.min():,}")
-        print(f"[las_reader] gps_time max: {raw_gps_time.max():,}")
-        assert np.all(raw_gps_time >= 0)
-        gps_time_ns = np.round(raw_gps_time.astype(np.float64) * 1_000_000_000.0).astype(np.uint64)
-        print(f"[las_reader] gps_time converted to uint64 ns, range [{gps_time_ns.min()}, {gps_time_ns.max()}]")
-        return gps_time_ns
+
+        gps_time = np.nan_to_num(gps_time, nan=0.0, posinf=0.0, neginf=0.0)
+        assert np.all(gps_time >= 0)
+
+        gps_time = np.round(gps_time.astype(np.float64, copy=False) / 1_000_000_000.0).astype(np.uint64)
+
+        print(f"[las_reader] gps_time min: {gps_time.min():.4e}")
+        print(f"[las_reader] gps_time max: {gps_time.max():.4e}")
+        return gps_time
