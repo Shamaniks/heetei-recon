@@ -27,5 +27,4 @@ def spatial_step_downsampling(track_xyz, scale, step_meters=3.0):
     if station_indices[-1] != last_track_idx:
         station_indices.append(last_track_idx)
 
-    print(f"[track_downsampling] extracted stations: {len(station_indices):,}")
     return station_indices

@@ -218,7 +218,7 @@ def cloud_downsample(ingested: IngestResult, cfg: dict):
     # binary_voxelisation divides voxel_size by a single scalar scale and
     # bit-masks all three axes with one shared mask — a real invariant of
     # that bitwise approach, not an incidental simplification.
-    assert np.allclose(scale[0], scale[1]) and np.allclose(scale[1], scale[2]), (
+    assert np.allclose(ingested.scale[0], ingested.scale[1]) and np.allclose(ingested.scale[1], ingested.scale[2]), (
         f"binary_voxelisation requires a uniform per-axis LAS scale; got {scale}"
     )
 
@@ -226,12 +226,12 @@ def cloud_downsample(ingested: IngestResult, cfg: dict):
     keep_indices = voxel_downsample(
         ingested.xyz, ingested.intensity,
         voxel_size=float(ds_cfg["voxel_size"]),
-        scale=float(scale[0]),
+        scale=float(ingested.scale[0]),
     )
     ingested.xyz       = ingested.xyz[keep_indices]
     ingested.gps       = ingested.gps[keep_indices]
     ingested.intensity = ingested.intensity[keep_indices]
-    print(f"[downsampling] {xyz_grid.shape[0]:,} -> {xyz_down.shape[0]:,} points")
+    print(f"[downsampling] sampled to {ingested.xyz.shape[0]:,} points")
     return
 
 
@@ -310,18 +310,19 @@ def track_downsample(ingested: IngestResult, cfg: dict):
     ingested.xyz_track = ingested.xyz_track[keep_indices]
     ingested.gps_track = ingested.gps_track[keep_indices]
 
+    print(f"[track_downsampling] extracted stations: {len(ingested.xyz_track):,}")
+
 
 # ── Therion convertation ─────────────────────────────────────────────────────
 def therion_processing(ingested: IngestResult, cfg: dict):
+    therion_cfg = cfg["therion"]
     survey = process_cloud_to_therion(
         ingested.xyz_track,
         ingested.gps_track,
         ingested.xyz,
         ingested.gps,
-        scale,
+        ingested.scale,
         therion_cfg["survey_name"],
-        step,
-        therion_cfg["dt_sec"]
     )
     survey.save()
 

@@ -90,8 +90,8 @@ def process_cloud_to_therion(
 
     mid_points = (track_gps[1:] + track_gps[:-1]) / 2
 
-    left_gps_bounds = np.empty_like(st_gps, dtype=st_gps.dtype)
-    right_gps_bounds = np.empty_like(st_gps, dtype=st_gps.dtype)
+    left_gps_bounds = np.empty_like(track_gps, dtype=track_gps.dtype)
+    right_gps_bounds = np.empty_like(track_gps, dtype=track_gps.dtype)
     
     left_gps_bounds[1:] = mid_points
     right_gps_bounds[:-1] = mid_points
@@ -101,14 +101,14 @@ def process_cloud_to_therion(
     left_boundaries = np.searchsorted(cloud_gps, left_gps_bounds, side='left')
     right_boundaries = np.searchsorted(cloud_gps, right_gps_bounds, side='right')
     
-    for j in range(num_stations - 1):
+    for j in range(len(track_xyz) - 1):
         p1, p2 = track_xyz[j], track_xyz[j+1]
         
         mag_vector = ((p2 - p1) * scale).reshape(1, 3)
         mag_polar = cartesian_to_polar(mag_vector)[0]
         survey.add_centerline_record(
-            s_from=j + 1, 
-            s_to=j + 2, 
+            s_from=j, 
+            s_to=j + 1, 
             length=float(mag_polar[0]), 
             compass=float(mag_polar[1]), 
             clino=float(mag_polar[2])
@@ -125,7 +125,7 @@ def process_cloud_to_therion(
 
         for shot in walls_polar:
             survey.add_wall_shot(
-                s_from=station_id, 
+                s_from=j, 
                 length=shot[0], 
                 compass=shot[1], 
                 clino=shot[2]

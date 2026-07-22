@@ -53,7 +53,7 @@ restore_intensity:
 # here — a duplicated value could silently drift from the data and corrupt
 # the voxel bucket size.
 downsampling:
-  voxel_size: 0.25
+  voxel_size: 0.82
 
 # ── Normal estimation (Ball Pivoting reconstruction only) ────────────────────
 # knn=15 gives stable normals at this point density; radius_search is
@@ -107,5 +107,4 @@ output:
 # ── Final mesh output ─────────────────────────────────────────────────────────
 therion:
   step_meters: 3.0
-  dt_sec: 0.5
-  survey_name: survey
+  survey_name: heetei
