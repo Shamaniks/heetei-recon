@@ -298,13 +298,11 @@ def stage_output(mesh, xyz_metres: np.ndarray, intensity: np.ndarray, cfg: dict)
 # ── Track to station downsampling ────────────────────────────────────────────
 def track_downsample(ingested: IngestResult, cfg: dict):
     therion_cfg = cfg["therion"]
-    scale = ingested.scale
-    step = therion_cfg["step_meters"]
 
     keep_indices = spatial_step_downsampling(
-        ingested.xyz_track, 
-        scale,
-        step,
+        xyz=ingested.xyz_track, 
+        scale=ingested.scale,
+        step_meters=therion_cfg["step_meters"],
     )
 
     ingested.xyz_track = ingested.xyz_track[keep_indices]
@@ -317,12 +315,12 @@ def track_downsample(ingested: IngestResult, cfg: dict):
 def therion_processing(ingested: IngestResult, cfg: dict):
     therion_cfg = cfg["therion"]
     survey = process_cloud_to_therion(
-        ingested.xyz_track,
-        ingested.gps_track,
-        ingested.xyz,
-        ingested.gps,
-        ingested.scale,
-        therion_cfg["survey_name"],
+        cloud_xyz=ingested.xyz,
+        cloud_gps=ingested.gps,
+        track_xyz=ingested.xyz_track,
+        track_gps=ingested.gps_track,
+        scale=ingested.scale,
+        survey_name=therion_cfg["survey_name"],
     )
     survey.save()
 
@@ -336,7 +334,8 @@ def main() -> None:
     ingested = stage_ingest(cfg)
     cloud_downsample(ingested, cfg,)
     track_downsample(ingested, cfg,)
-    therion_processing(ingested, cfg)
+
+    therion_processing(ingested, cfg,)
 
     # intensity = stage_restore_intensity(ingested, cfg)
     # xyz = ingested.xyz

@@ -1,11 +1,15 @@
 import numpy as np
 
 
-def spatial_step_downsampling(track_xyz, scale, step_meters=3.0):
+def spatial_step_downsampling(
+        xyz:   np.ndarray, 
+        scale: np.ndarray, 
+        step_meters=3.0
+    ):
     """
     Parameters
     ----------
-    track_xyz:   np.ndarray (N, 3)
+    xyz:         np.ndarray (N, 3)
     scale:       np.ndarray (3,)
     step_meters: float
 
@@ -15,16 +19,16 @@ def spatial_step_downsampling(track_xyz, scale, step_meters=3.0):
     """
     station_indices = [0]
     last_idx = 0
-    last_point = track_xyz[last_idx] * scale
-    for i in range(1, len(track_xyz)):
-        curr_point = track_xyz[i] * scale
+    last_point = xyz[last_idx] * scale
+    for i in range(1, len(xyz)):
+        curr_point = xyz[i] * scale
         if np.linalg.norm(curr_point - last_point) >= step_meters:
             station_indices.append(i)
             last_idx = i
-            last_point = track_xyz[last_idx] * scale
+            last_point = xyz[last_idx] * scale
 
-    last_track_idx = len(track_xyz) - 1
-    if station_indices[-1] != last_track_idx:
-        station_indices.append(last_track_idx)
+    last_idx = len(xyz) - 1
+    if station_indices[-1] != last_idx:
+        station_indices.append(last_idx)
 
     return station_indices
