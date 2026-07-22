@@ -71,6 +71,7 @@ from utils.therion import process_cloud_to_therion
 from ingest.chunk_reader import load_session_arrays
 from restore_intensity.restore_intensity import restore as restore_intensity_fn
 from downsampling.max_pooling import voxel_downsample
+from downsampling.spatial_step_downsampling import spatial_step_downsampling
 from pipeline.normals import estimate_normals
 from pipeline.reconstruct import reconstruct
 from pipeline.output import save_mesh, show_mesh
@@ -86,8 +87,10 @@ class IngestResult:
     xyz: np.ndarray                 # (N, 3) int32 — raw LAS grid coordinates
     gps: np.ndarray                 # (N,)   uint64 — LAS nanoseconds of point record
     intensity: np.ndarray           # (N,)   uint8 — raw recorded intensity
+
     scale: np.ndarray               # (3,)   float32 — cloud's LAS header scale
     offset: np.ndarray              # (3,)   float32 — cloud's LAS header offset
+
     xyz_track: "np.ndarray | None"  # (M, 3) int32, or None if no track_path
     gps_track: np.ndarray           # (N,)   uint64 — LAS nanoseconds of point record
 
@@ -207,11 +210,10 @@ def stage_restore_intensity(ingested: IngestResult, cfg: dict) -> np.ndarray:
     return adjusted
 
 
-# ── Stage 3: downsample ───────────────────────────────────────────────────────
-
-def stage_downsample(xyz_grid: np.ndarray, intensity: np.ndarray, scale: np.ndarray, cfg: dict):
+# ── Cloud downsample ──────────────────────────────────────────────────────────
+def cloud_downsample(ingested: IngestResult, cfg: dict):
     if not cfg["pipeline"]["downsampling"]:
-        return xyz_grid, intensity
+        return
 
     # binary_voxelisation divides voxel_size by a single scalar scale and
     # bit-masks all three axes with one shared mask — a real invariant of
@@ -222,14 +224,15 @@ def stage_downsample(xyz_grid: np.ndarray, intensity: np.ndarray, scale: np.ndar
 
     ds_cfg = cfg["downsampling"]
     keep_indices = voxel_downsample(
-        xyz_grid, intensity,
+        ingested.xyz, ingested.intensity,
         voxel_size=float(ds_cfg["voxel_size"]),
         scale=float(scale[0]),
     )
-    xyz_down = xyz_grid[keep_indices]
-    intensity_down = intensity[keep_indices]
+    ingested.xyz       = ingested.xyz[keep_indices]
+    ingested.gps       = ingested.gps[keep_indices]
+    ingested.intensity = ingested.intensity[keep_indices]
     print(f"[downsampling] {xyz_grid.shape[0]:,} -> {xyz_down.shape[0]:,} points")
-    return xyz_down, intensity_down
+    return
 
 
 # ── Stage 4: normals (Ball Pivoting only) ─────────────────────────────────────
@@ -292,11 +295,24 @@ def stage_output(mesh, xyz_metres: np.ndarray, intensity: np.ndarray, cfg: dict)
             show_mesh(mesh)
 
 
-# ── Therion convertation ─────────────────────────────────────────────────────
-def stage_therion_processing(ingested, cfg):
+# ── Track to station downsampling ────────────────────────────────────────────
+def track_downsample(ingested: IngestResult, cfg: dict):
     therion_cfg = cfg["therion"]
-    scale = ingested.scale[0]
-    step = int(therion_cfg["step_meters"] / scale)
+    scale = ingested.scale
+    step = therion_cfg["step_meters"]
+
+    keep_indices = spatial_step_downsampling(
+        ingested.xyz_track, 
+        scale,
+        step,
+    )
+
+    ingested.xyz_track = ingested.xyz_track[keep_indices]
+    ingested.gps_track = ingested.gps_track[keep_indices]
+
+
+# ── Therion convertation ─────────────────────────────────────────────────────
+def therion_processing(ingested: IngestResult, cfg: dict):
     survey = process_cloud_to_therion(
         ingested.xyz_track,
         ingested.gps_track,
@@ -307,7 +323,7 @@ def stage_therion_processing(ingested, cfg):
         step,
         therion_cfg["dt_sec"]
     )
-    return survey
+    survey.save()
 
 
 # ── Orchestrator ───────────────────────────────────────────────────────────────
@@ -317,16 +333,15 @@ def main() -> None:
     cfg = _apply_cli_overrides(load_config(args.config), args)
 
     ingested = stage_ingest(cfg)
+    cloud_downsample(ingested, cfg,)
+    track_downsample(ingested, cfg,)
+    therion_processing(ingested, cfg)
 
     # intensity = stage_restore_intensity(ingested, cfg)
     # xyz = ingested.xyz
     # scale, offset = ingested.scale, ingested.offset
     # del ingested
     # gc.collect()
-
-    survey = stage_therion_processing(ingested, cfg)
-    survey.save()
-    del survey, ingested
 
     # xyz_down, intensity_down = stage_downsample(xyz, intensity, scale, cfg)
     # del xyz, intensity
