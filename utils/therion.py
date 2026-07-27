@@ -56,7 +56,7 @@ class TherionSurveyData:
 
 
     def save(self):
-        file_path = f"{self.survey_name}.th"
+        file_path = f"therion_files/{self.survey_name}.th"
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(self.serialize())
         print(f"[therion] survey saved: {file_path}")
