@@ -26,7 +26,7 @@ def division_voxelisation(
         scale: float,
     ) -> np.ndarray:
 
-    xyz_voxels = xyz_cloud // voxel_size
+    xyz_voxels = xyz_cloud // (voxel_size / scale)
     
     return xyz_voxels
 
