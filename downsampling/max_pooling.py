@@ -1,6 +1,7 @@
 """
 Preprocessing: voxel downsampling and normal estimation.
 """
+from typing import Literal
 
 import gc
 
@@ -9,7 +10,7 @@ from tqdm import tqdm
 import numpy as np
 from scipy.spatial import cKDTree
 
-from downsampling.voxelisation import binary_voxelisation
+from downsampling.voxelisation import voxelisation
 
 
 def voxel_downsample(
@@ -17,6 +18,7 @@ def voxel_downsample(
         intensity:  np.ndarray,
         voxel_size: float,
         scale:      float,
+        mode: Literal["division", "binary"] = "division"
     ) -> np.ndarray:
     """
     Reduce point density via voxel grid max pooling
@@ -26,7 +28,8 @@ def voxel_downsample(
     
     # Voxeling cloud
     # voxel_size required there:
-    voxels = binary_voxelisation(
+    voxels = voxelisation(
+        mode,
         xyz_cloud,
         voxel_size,
         scale,
