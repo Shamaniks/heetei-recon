@@ -7,15 +7,6 @@ from typing import Callable, Literal
 import numpy as np
 
 
-VOXEL_METHODS: dict[
-    Literal["binary", "division"], 
-    Callable[[np.ndarray, float, float], np.ndarray]
-] = {
-    "binary": binary_voxelisation,
-    "division": division_voxelisation,
-}
-
-
 def voxelisation(
         mode: Literal["binary", "division"],
         xyz_cloud: np.ndarray, 
@@ -55,3 +46,14 @@ def binary_voxelisation(
     mask = ~mersenne_number
     xyz_voxels = xyz_cloud & mask
     return xyz_voxels
+
+
+VOXEL_METHODS: dict[
+    Literal["binary", "division"], 
+    Callable[[np.ndarray, float, float], np.ndarray]
+] = {
+    "binary": binary_voxelisation,
+    "division": division_voxelisation,
+}
+
+

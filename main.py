@@ -219,7 +219,7 @@ def cloud_downsample(ingested: IngestResult, cfg: dict):
     # bit-masks all three axes with one shared mask — a real invariant of
     # that bitwise approach, not an incidental simplification.
     assert np.allclose(ingested.scale[0], ingested.scale[1]) and np.allclose(ingested.scale[1], ingested.scale[2]), (
-        f"binary_voxelisation requires a uniform per-axis LAS scale; got {scale}"
+        f"voxelisation requires a uniform per-axis LAS scale; got {scale}"
     )
 
     ds_cfg = cfg["downsampling"]
@@ -227,6 +227,7 @@ def cloud_downsample(ingested: IngestResult, cfg: dict):
         ingested.xyz, ingested.intensity,
         voxel_size=float(ds_cfg["voxel_size"]),
         scale=float(ingested.scale[0]),
+        mode=ds_cfg["mode"],
     )
     ingested.xyz       = ingested.xyz[keep_indices]
     ingested.gps       = ingested.gps[keep_indices]
