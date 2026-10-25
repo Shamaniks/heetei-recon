@@ -2,6 +2,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Dict
 import collections
+from scipy.spatial import KDTree
 
 
 @dataclass
@@ -25,8 +26,10 @@ class TherionSurveyData:
 
 
     def serialize(self) -> str:
+        safe_survey_name = self.survey_name.replace('.', '_')
+
         header = (
-            f"survey {self.survey_name}\n"
+            f"survey {safe_survey_name}\n"
             "  centerline\n"
             "    units length meters\n"
             "    units compass clino degrees\n"
@@ -86,9 +89,37 @@ def compute_step_geometry(p1: np.ndarray, p2: np.ndarray, scale: np.ndarray) -> 
         return None
         
     compass = np.degrees(np.arctan2(v[0], v[1])) % 360
-    clino = np.degrees(np.arcsin(v[2] / length))
+    ratio = np.clip(v[:, 2] / safe_lengths, -1.0, 1.0)
+    clino = np.degrees(np.arcsin(ratio))
     
     return length, compass, clino
+
+
+def sort_walls(walls_polar: np.ndarray, num_azimuth: int = 12, num_clino: int = 6) -> np.ndarray:
+    if len(walls_polar) == 0:
+        return np.empty((0, 3))
+        
+    az_sectors = np.linspace(0, 360, num_azimuth + 1)
+    cl_sectors = np.linspace(-90, 90, num_clino + 1)
+    filtered_shots = []
+    
+    for i in range(num_azimuth):
+        mask_az = (walls_polar[:, 1] >= az_sectors[i]) & (walls_polar[:, 1] < az_sectors[i+1])
+        az_pts = walls_polar[mask_az]
+        
+        if len(az_pts) == 0:
+            continue
+            
+        for j in range(num_clino):
+            mask_cl = (az_pts[:, 2] >= cl_sectors[j]) & (az_pts[:, 2] < cl_sectors[j+1])
+            sector_pts = az_pts[mask_cl]
+            
+            if len(sector_pts) > 0:
+                max_dist_idx = np.argmax(sector_pts[:, 0])
+                filtered_shots.append(sector_pts[max_dist_idx])
+                
+    result = np.array(filtered_shots)
+    return result[np.argsort(result[:, 1])]
 
 
 def process_cloud_to_therion(
@@ -98,76 +129,62 @@ def process_cloud_to_therion(
         track_gps: np.ndarray, 
         scale:     np.ndarray,
         survey_name: str,
+        time_weight=256.0
     ) -> TherionSurveyData:
         
     survey = TherionSurveyData(survey_name=survey_name)
     num_stations = len(track_xyz)
 
-    cloud_sort_idx = np.argsort(cloud_gps)
-    cloud_xyz = np.ascontiguousarray(cloud_xyz[cloud_sort_idx])
-    cloud_gps = np.ascontiguousarray(cloud_gps[cloud_sort_idx])
+    track_m = track_xyz * scale
+    cloud_m = cloud_xyz * scale
 
-    mid_points = (track_gps[1:] + track_gps[:-1]) / 2
+    t_start = track_gps[0]
+    t_end = track_gps[-1]
+    t_range = t_end - t_start if (t_end - t_start) > 0 else 1.0
 
-    left_gps_bounds = np.empty_like(track_gps, dtype=track_gps.dtype)
-    right_gps_bounds = np.empty_like(track_gps, dtype=track_gps.dtype)
+    track_t_norm = (track_gps - t_start) / t_range
+    cloud_t_norm = (cloud_gps - t_start) / t_range
+
+    track_4d = np.column_stack((track_m, track_t_norm * time_weight))
+    cloud_4d = np.column_stack((cloud_m, cloud_t_norm * time_weight))
+
+    track_tree = KDTree(track_4d)
     
-    left_gps_bounds[1:] = mid_points
-    right_gps_bounds[:-1] = mid_points
-    left_gps_bounds[0] = 0
-    right_gps_bounds[-1] = np.iinfo(track_gps.dtype).max
-
-    left_boundaries = np.searchsorted(cloud_gps, left_gps_bounds, side='left')
-    right_boundaries = np.searchsorted(cloud_gps, right_gps_bounds, side='right')
+    points_to_stations_dist, station_indices = track_tree.query(
+        cloud_4d, 
+        distance_upper_bound=30 / scale[0] + time_weight
+    )
     
     for j in range(num_stations - 1):
         p1, p2 = track_xyz[j], track_xyz[j+1]
-        
         mag_vector = ((p2 - p1) * scale).reshape(1, 3)
         mag_polar = cartesian_to_polar(mag_vector)[0]
         survey.add_centerline_record(
-            s_from=j, 
-            s_to=j + 1, 
+            s_from=j, s_to=j + 1, 
             length=float(mag_polar[0]), 
             compass=float(mag_polar[1]), 
             clino=float(mag_polar[2])
         )
 
-        start_idx = left_boundaries[j]
-        end_idx = right_boundaries[j]
-        local_pts = cloud_xyz[start_idx:end_idx]
-
-        if len(local_pts) == 0: 
+    for j in range(num_stations):
+        mask = (station_indices == j)
+        if not np.any(mask):
             continue
-
-        vectors_slice = (local_pts - p1) * scale
+            
+        local_pts = cloud_xyz[mask]
+        p_station = track_xyz[j]
+        
+        vectors_slice = (local_pts - p_station) * scale
         walls_polar = cartesian_to_polar(vectors_slice)
-
-        for shot in walls_polar:
+        
+        cleaned_walls = sort_walls(walls_polar, num_azimuth=16, num_clino=8)
+        
+        for shot in cleaned_walls:
             survey.add_wall_shot(
                 s_from=j, 
-                length=shot[0], 
-                compass=shot[1], 
-                clino=shot[2]
-            )
-            
-    last_idx = num_stations - 1
-    last_p = track_xyz[last_idx]
-    
-    last_start_idx = left_boundaries[last_idx]
-    last_end_idx = right_boundaries[last_idx]
-    last_local_pts = cloud_xyz[last_start_idx:last_end_idx]
-    
-    if len(last_local_pts) > 0:
-        last_vectors_slice = (last_local_pts - last_p) * scale
-        last_walls_polar = cartesian_to_polar(last_vectors_slice)
-        
-        for shot in last_walls_polar:
-            survey.add_wall_shot(
-                s_from=last_idx, 
-                length=shot[0], 
-                compass=shot[1], 
-                clino=shot[2]
+                length=float(shot[0]), 
+                compass=float(shot[1]), 
+                clino=float(shot[2])
             )
         
     return survey
