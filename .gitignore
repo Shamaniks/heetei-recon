@@ -9,7 +9,6 @@ __pycache__/
 *.tar.gz
 *.npz
 *.th
-*.yaml
 *.lox
 *.xtherion.dat
 *.thconfig
